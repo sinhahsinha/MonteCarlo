@@ -1,0 +1,658 @@
+clear all;clc;close all;format long
+
+xthick=10e-7; % dielectric width in cm
+xdiv=50;
+h=xthick/xdiv; % mesh size
+
+die=50e-7; % dielectric thickness in cm
+subsdiv=50;
+ydiv=100;% mesh divisons in y dirn
+diediv=ydiv-subsdiv;
+
+noi=50;% number of injections
+particles=15;% particles per injection
+
+for q=1:ydiv
+    for p=1:xdiv
+        k=(q-1)*xdiv+(p);
+        u(k)=0;% defining initial potential
+        ch(q,p)=0;% setting initial condition for effective charge
+        c(k,1)=0;
+        
+        top(k)=0;
+        bottom(k)=0;
+        va(k)=0;
+        vb(k)=0;
+        vc(k)=0;
+            
+        bine(q,p)=0;
+        binh(q,p)=0;
+    end
+end
+
+count_pi_Si=0;%counter photoinjection
+count_pi_die=0;
+factor=1;%compensates for excess charge
+
+I=20;%energy of incident photon
+
+na=2.74e+22;% density of Si3N4
+za=70;%atomic number of scattering center
+nb=5e+22;% density of Si
+zb=14;%atomic number of scattering center
+
+mobility=20;%in cm2/Vs
+mobilitySi=500;
+
+lambda=2.08e-6; % DENSITY= 3.1g/cc(Si3N4), u=4.7899e+5 @20eV FROM http://physics.nist.gov/PhysRefData/FFast/html/form.html ,
+lambdaSi=4.74e-6; % density =2.32g/cc, u=2.1e+5 per cm @ 20eV %for Sio2:2e-6;u=5.08e+5 ,density=2.2g/cc
+
+for z=1:noi 
+    count_pe(z)=0;% counter for photoemission
+
+    for w=1:particles %counter for particles
+        r=rand;
+        a(z,w)=xthick*rand;% a stores x coordinate of e-h pair generation position in cm
+        s=-1*lambda*log(r);
+        if s>die
+            snew=die+(lambdaSi/lambda)*(s-die); % correction for different linear attenuation
+        else
+            snew=s;
+        end
+        angle1(z,w)=0; % just creating a matrix angle
+        b(z,w)=0-snew;% b stores y coordinate of e-h pair generation position, surface at y=0
+        Ex(z,w)=I-5;
+        d(z,w)=0;
+        yline(z,w)=-die;
+        piax(z,w)=0;
+        piay(z,w)=0;
+        pibx(z,w)=0;
+        piby(z,w)=0;
+
+        ha(z,w)=a(z,w);% stored x-position of hole
+        hb(z,w)=b(z,w);% stored y-position of hole
+    end
+    
+%  hold on
+%      for w=1:particles
+%      plot(ha(z,w),hb(z,w),'or','LineWidth',2.5,'MarkerSize',9)
+%      end
+% 
+%   hold on
+%     plot(a,yline,'--')
+%    hold on
+
+    %creation of free electron and its movement
+    for loop=1:z
+        for w=1:particles
+                
+            En=Ex(z,w)/1000;
+            alpha=7e-3/En; % formula from ganesh's paper
+
+            if ((Ex(z,w)>=4.7) && (b(z,w))<0 && (b(z,w)>-die))% if a electron energy>4.7ev(Si3N4 band gap) and electron is in dielectric(50nm thick
+                r=rand;
+
+                %calculation of rutherford to isotropic cross section       
+                sri=(300*(En^(1-za/2000))/za)+(za^3/(3e+5*En));
+                p1=1/(1+sri);% probability of isotropic
+
+                ra=rand;
+                if ((r<p1)||(z==1));% for isotropic scattering,isotropic scattering happens when electrons are generated 
+                    angle=180/3.14159265*acos(1-2*ra);%isotropic
+                else %rutherford scattering
+                    angle=180/3.14159265*acos(1-(2*alpha*ra/(1+alpha-ra)));%rutherford
+                end % angle is wrt normal
+
+                sigma=4.7e-18*(za^1.33+0.032*za^2)/((En+(0.0155*za^1.33*En^0.5))*(1-(0.02*za^0.5*(2.71^(-1*(log10(8*En*za^(-1.33)))^2)))));
+                lambda=1/(na*sigma);%mean free path
+
+                rb=rand;
+                s=-1*lambda*log(rb);
+
+                r3=rand;
+                if (r3<=0.5)
+                    angle=360-angle;
+                end
+
+                v=sqrt(2*En*1000*1.6e-19/9.1e-31); %velocity from energy
+                t=s/v; %time between successive collisions
+
+                %finding the probable position based on probablistic
+                %motion
+                angle2=angle+angle1(z,w);
+                atemp=a(z,w)+s*(sin(angle2*3.14159265/180)); %movement in x dirn
+                btemp=b(z,w)-s*(cos(angle2*3.14159265/180)); % movement in y dirn
+
+                % to find the mesh in which the initial/final position lies
+                for q=1:ydiv  
+                    for p=1:xdiv 
+                        if (a(z,w)>=(0+(p-1)*h)) && (a(z,w)<(p*h)) && (b(z,w)<(0-(q-1)*h)) && (b(z,w)>=(0-q*h))
+                            ki=(q-1)*xdiv+(p);
+                        end
+
+                        if (atemp>=(0+(p-1)*h)) && (atemp<(p*h)) && (btemp<(0-(q-1)*h)) && (btemp>=(0-q*h))
+                            kf=(q-1)*xdiv+(p);
+                        end
+
+                        if (a(z,w)>=(0+(p-1)*h)) && (a(z,w)<(p*h)) && (btemp<(0-(q-1)*h)) && (btemp>=(0-q*h))
+                            kupper=(q-1)*xdiv+(p);
+                        end
+
+                        if (atemp>=(0+(p-1)*h)) && (atemp<(p*h)) && (b(z,w)<(0-(q-1)*h)) && (b(z,w)>=(0-q*h))
+                            klower=(q-1)*xdiv+(p);
+                        end
+                    end
+                end
+
+                vd=mobility*(u(kf)-u(ki))/s;
+                s_d=s+vd*1; %movement in direction of motion
+
+                s_p=mobility*(u(kupper)-u(klower))*1/s;% movement perpendicular to direction of motion.
+
+                if (Ex(z,w)>=4.7)
+                    d(z,w)=d(z,w)+s;
+                    angle2=angle+angle1(z,w);
+                    a(z,w)=a(z,w)+s_d*(sin(angle2*3.14159265/180))-s_p*(sin(angle2*3.14159265/180)); %movement in x dirn
+                    b(z,w)=b(z,w)-s_d*(cos(angle2*3.14159265/180))-s_p*(cos(angle2*3.14159265/180)); % movement in y dirn
+                    angle1(z,w)=angle2;
+                end
+
+                if b(z,w)<-die
+                    Ex(z,w)=Ex(z,w)-2;%2eV interface energy barrier across Si-Si3N4 junction
+                    count_pi_Si=count_pi_Si+1
+                    piay(z,w)=b(z,w);
+                    piax(z,w)=a(z,w);
+                end
+
+                Ex(z,w)=Ex(z,w)-(6.4e+6)*s;% CSDA in Si3N4; for CSDA in SiO2 4.4e+6;
+                
+            elseif ((Ex(z,w)>=2) && (b(z,w)<-die)) % in Silicon calculation of rutherford to isotropic cross section
+                sri=(300*(En^(1-zb/2000))/zb)+(zb^3/(3e+5*En));
+                p1=1/(1+sri);% probability of isotropic
+
+                ra=rand;
+                if ((r<p1)||(z==1));% for isotropic scattering,isotropic scattering happens when electrons are generated 
+                    angle=180/3.14159265*acos(1-2*ra);%isotropic
+                else %rutherford scattering
+                    angle=180/3.14159265*acos(1-(2*alpha*ra/(1+alpha-ra)));%rutherford
+                end % angle is wrt normal
+
+                sigma=4.7e-18*(zb^1.33+0.032*zb^2)/((En+(0.0155*zb^1.33*En^0.5))*(1-(0.02*zb^0.5*(2.71^(-1*(log10(8*En*zb^(-1.33)))^2)))));
+                lambda=1/(nb*sigma);%mean free path
+
+                rb=rand;
+                s=-1*lambda*log(rb);
+
+                r3=rand;
+                if (r3<=0.5)
+                    angle=360-angle;
+                end
+                
+                v=sqrt(2*En*1000*1.6e-19/9.1e-31); %velocity from energy
+                t=s/v; %time between successive collisions
+
+                %finding the probable position based on probablistic
+                %motion
+                angle2=angle+angle1(z,w);
+                atemp=a(z,w)+s*(sin(angle2*3.14159265/180)); %movement in x dirn
+                btemp=b(z,w)-s*(cos(angle2*3.14159265/180)); % movement in y dirn
+
+                % to find the mesh in which the initial/final position lies
+                for q=1:ydiv  
+                    for p=1:xdiv 
+                        if (a(z,w)>=(0+(p-1)*h)) && (a(z,w)<(p*h)) && (b(z,w)<(0-(q-1)*h)) && (b(z,w)>=(0-q*h))
+                            ki=(q-1)*xdiv+(p);
+                        end
+
+                        if (atemp>=(0+(p-1)*h)) && (atemp<(p*h)) && (btemp<(0-(q-1)*h)) && (btemp>=(0-q*h))
+                            kf=(q-1)*xdiv+(p);
+                        end
+
+                        if (a(z,w)>=(0+(p-1)*h)) && (a(z,w)<(p*h)) && (btemp<(0-(q-1)*h)) && (btemp>=(0-q*h))
+                            kupper=(q-1)*xdiv+(p);
+                        end
+
+                        if (atemp>=(0+(p-1)*h)) && (atemp<(p*h)) && (b(z,w)<(0-(q-1)*h)) && (b(z,w)>=(0-q*h))
+                            klower=(q-1)*xdiv+(p);
+                        end
+                    end
+                end
+
+                vd=mobilitySi*(u(kf)-u(ki))/s;
+                s_d=s+vd*1;%; %movement in direction of motion
+
+                s_p=mobilitySi*(u(kupper)-u(klower))*1/s;%; % movement perpendicular to direction of motion.
+
+                if (Ex(z,w)>=2)
+                    d(z,w)=d(z,w)+s;
+                    angle2=angle+angle1(z,w);
+                    a(z,w)=a(z,w)+s_d*(sin(angle2*3.14159265/180))-s_p*(sin(angle2*3.14159265/180)); %movement in x dirn
+                    b(z,w)=b(z,w)-s_d*(cos(angle2*3.14159265/180))-s_p*(cos(angle2*3.14159265/180)); % movement in y dirn
+                    
+                    if b(z,w)>-die
+                        Ex(z,w)=Ex(z,w)-2;
+                        count_pi_die=count_pi_die+1
+                        piby(z,w)=b(z,w);
+                        pibx(z,w)=a(z,w);
+                    end
+                    
+                    angle1(z,w)=angle2;
+                end
+
+                 Ex(z,w)=Ex(z,w)-(8e+6)*s;% CSDA in Si
+
+            else %if condition of(E(z,w)>=5) && (b(z,w))<0 is not satisfied we freeze that position 
+                 a(z,w)=a(z,w);
+                 b(z,w)=b(z,w);
+
+            end
+
+            if a(z,w)<0 % if electrons go outside boundary they reappear on other side
+                a(z,w)=a(z,w)+xthick;
+            end
+
+            if a(z,w)>xthick  % if electrons go outside boundary they reappear
+                a(z,w)=a(z,w)-xthick;
+            end
+        end
+
+    % final position of elctrons
+    % 
+    
+%     .............
+%      hold on
+%      figure(1)
+%      for w=1:particles
+%      semilogy(a(z,w),b(z,w),'.b','MarkerSize',20)
+%      end
+%      ............
+     
+% %     xlabel('position in x dirn in cm >>>')
+% %     ylabel('<<< depth in dielectric in cm')
+% %     title('position of interaction of holes and electrons')
+%     hold on
+%     figure(1)
+%     for w=1:particles
+%     semilogy(piax(z,w),piay(z,w),'*g')
+%     end
+%     hold on
+%     figure(1)
+%     for w=1:particles
+%     semilogy(pibx(z,w),piby(z,w),'*g')
+%     end
+
+    end
+
+    % counting number of ejected electron
+    for w=1:particles
+        if (b(z,w)>0)% electrons above y=0;
+            count_pe(z)=count_pe(z)+1;
+        end
+    end
+    
+    electrons_ejected(z)=count_pe(z);
+    total_electrons(z)=particles*z;
+    percentage_ejection(z)=electrons_ejected(z)*100/total_electrons(z);
+
+    % photoinjection=countpib-countpia
+    % percentage_photoinjection=photoinjection*100/total_electrons
+
+    %solving poissons equation
+    A=zeros(ydiv*xdiv,ydiv*xdiv);
+    
+   if z==1
+        for q=1
+            for p=1
+                
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k+xdiv))=1; %u(i,j+1)
+                A(k,(k+1))=1; %u(i+1,j)
+                A(k,(k+xdiv-1))=1; %u(i-1,j)
+                                   %u(i,j-1)=u(i,j)
+                A(k,k)=-3; %u(i,j)
+            end
+        end
+
+        for q=1
+            for p=2:xdiv
+
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k+xdiv))=1; %u(i,j+1)
+                A(k,(k+1))=1; %u(i+1,j)
+                A(k,(k-1))=1; %u(i-1,j)
+                              %u(i,j-1)=u(i,j)  
+                A(k,k)=-3; %u(i,j)
+            end
+        end
+
+        for q=2:(ydiv-1)
+            for p=1:xdiv
+
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k+xdiv))=1; %u(i,j+1)
+                A(k,(k-xdiv))=1; %u(i,j-1)
+                A(k,(k+1))=1; %u(i+1,j)
+                A(k,(k-1))=1; %u(i-1,j)
+                A(k,k)=-4; %u(i,j)
+            end
+        end
+
+        for q=ydiv
+            for p=1:xdiv
+
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k-xdiv))=1; %u(i,j-1)
+                A(k,(k-xdiv+1))=1; %u(i+1,j) instead of A(k,(k+1))=1
+                A(k,(k-1))=1; %u(i-1,j)
+                              %u(i,j+1)=0
+                A(k,k)=-4; %u(i,j)
+            end
+        end
+        
+    else % when z>1(ie second injection case)
+        
+        for q=1
+            for p=1
+
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k+xdiv))=1; %u(i,j+1)
+                A(k,(k+1))=1; %u(i+1,j)
+                A(k,(k+xdiv-1))=1; %u(i-1,j)
+                                   %u(i,j-1) is substracted from the
+                                   %constant on other side of equation
+                A(k,k)=-4; %u(i,j)
+            end
+        end
+
+        for q=1
+            for p=2:xdiv
+
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k+xdiv))=1; %u(i,j+1)
+                A(k,(k+1))=1; %u(i+1,j)
+                A(k,(k-1))=1; %u(i-1,j)
+                              %u(i,j-1) is substracted from the
+                              %constant on other side of equation
+                A(k,k)=-4; %u(i,j)
+            end
+        end
+
+        for q=2:(ydiv-subsdiv-1)
+            for p=1:xdiv
+
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k+xdiv))=1; %u(i,j+1)
+                A(k,(k-xdiv))=1; %u(i,j-1)
+                A(k,(k+1))=1; %u(i+1,j)
+                A(k,(k-1))=1; %u(i-1,j)
+                A(k,k)=-4; %u(i,j)
+            end
+        end
+
+        for q=(ydiv-subsdiv)
+            for p=1:xdiv
+
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k-xdiv))=1; %u(i,j-1) 
+                A(k,(k-xdiv+1))=1; %u(i+1,j) instead of A(k,(k+1))=1
+                A(k,(k-1))=1; %u(i-1,j)
+                              %u(i,j+1) is subtrated from the constant on
+                              %the other side of the equation
+                A(k,k)=-4; %u(i,j)
+            end
+        end
+        
+        for q=(ydiv-subsdiv+1)
+            for p=1
+
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k+xdiv))=1; %u(i,j+1)
+                A(k,(k+1))=1; %u(i+1,j)
+                A(k,(k+xdiv-1))=1; %u(i-1,j)
+                                   %u(i,j-1) is substracted from the
+                                   %constant on other side of equation
+                A(k,k)=-4; %u(i,j)
+            end
+        end
+        
+        for q=(ydiv-subsdiv+1)
+            for p=2:xdiv
+
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k+xdiv))=1; %u(i,j+1)
+                A(k,(k+1))=1; %u(i+1,j)
+                A(k,(k-1))=1; %u(i-1,j)
+                              %u(i,j-1) is substracted from the
+                              %constant on other side of equation
+                A(k,k)=-4; %u(i,j)
+            end
+        end
+
+        for q=(ydiv-subsdiv+2):(ydiv-1)
+            for p=1:xdiv
+
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k+xdiv))=1; %u(i,j+1)
+                A(k,(k-xdiv))=1; %u(i,j-1)
+                A(k,(k+1))=1; %u(i+1,j)
+                A(k,(k-1))=1; %u(i-1,j)
+                A(k,k)=-4; %u(i,j)
+            end
+        end
+
+        for q=ydiv
+            for p=1:xdiv
+
+                k=(q-1)*xdiv+(p);
+
+                A(k,(k-xdiv))=1; %u(i,j-1) 
+                A(k,(k-xdiv+1))=1; %u(i+1,j) instead of A(k,(k+1))=1
+                A(k,(k-1))=1; %u(i-1,j)
+                              %u(i,j+1) is subtrated from the constant on
+                              %the other side of the equation
+                A(k,k)=-4; %u(i,j)
+            end
+        end
+        
+    end
+    
+    % setting boundary condition
+    for q=1:ydiv
+        for p=1:xdiv
+            k=(q-1)*xdiv+(p);
+            bine(q,p)=0;
+            binh(q,p)=0;
+        end
+    end
+
+    % binnning to count number of electrons & holes in each mesh
+
+    for q=1:ydiv
+        sheet(q)=0;
+        for p=1:xdiv 
+            for w=1:particles %number of particles.
+
+                if (a(z,w)>=(0+(p-1)*h)) && (a(z,w)<(p*h)) && (b(z,w)<(0-(q-1)*h)) && (b(z,w)>=(0-q*h))
+                    bine(q,p)=bine(q,p)+1;
+                end
+
+                if (ha(z,w)>=(0+(p-1)*h)) && (ha(z,w)<(p*h)) && (hb(z,w)<(0-(q-1)*h)) && (hb(z,w)>=(0-q*h))
+                    binh(q,p)=binh(q,p)+1;
+                end
+            end   
+        end
+    end
+
+    charge=binh-bine;
+    
+    % for sheet charge calculation
+    for q=1:ydiv
+        sheet(q)=0;
+        for p=1:xdiv
+            sheet(q)=sheet(q)+charge(q,p);
+        end
+    end
+    
+    % setting effective charge points
+    for q=1:ydiv-subsdiv
+        
+        if q<=(ydiv-subsdiv)
+                er=7.5; %Si3N4
+        else
+                er=11.7; %Si
+        end
+        
+        for p=1:xdiv
+            k=(q-1)*xdiv+(p);
+            
+            if q==(ydiv-subsdiv)
+                if (p-1)>0
+                    ch(q,p)=[charge(q,p)+charge(q,p-1)+charge(q-1,p)+charge((q-1),(p-1))]/4;
+                    c(k,1)=-((h^2)*ch(q,p)*1.6e-19/(8.85e-14*er))-vb(k);
+                else
+                    ch(q,p)=[charge(q,p)+charge(q,p+xdiv-1)+charge(q-1,p)+charge((q-1),(p+xdiv-1))]/4;
+                    c(k,1)=-((h^2)*ch(q,p)*1.6e-19/(8.85e-14*er))-vb(k);
+                end
+            end
+            
+            if q==1
+                if (p-1)>0
+                    ch(q,p)=[charge(q,p)+charge(q,p-1)]/4;
+                    c(k,1)=-((h^2)*ch(q,p)*1.6e-19/(8.85e-14*er))-top(k);
+                else
+                    ch(q,p)=[charge(q,p)+charge(q,p+xdiv-1)]/4;
+                    c(k,1)=-((h^2)*ch(q,p)*1.6e-19/(8.85e-14*er))-top(k);
+                end
+            end
+            
+        end
+    end
+
+    for q=(ydiv-subsdiv+1):ydiv
+        
+        if q<=(ydiv-subsdiv)
+                er=7.5; %Si3N4
+        else
+                er=11.7; %Si
+        end
+        
+        for p=1:xdiv
+            k=(q-1)*xdiv+(p);
+            
+            if q==ydiv
+                if (p-1)>0
+                    ch(q,p)=[charge(q,p)+charge(q,p-1)+charge(q-1,p)+charge((q-1),(p-1))]/4;
+                    c(k,1)=-((h^2)*ch(q,p)*1.6e-19/(8.85e-14*er))-bottom(k);
+                else
+                    ch(q,p)=[charge(q,p)+charge(q,p+xdiv-1)+charge(q-1,p)+charge((q-1),(p+xdiv-1))]/4;
+                    c(k,1)=-((h^2)*ch(q,p)*1.6e-19/(8.85e-14*er))-bottom(k);
+                end
+            end
+            
+            if q==(ydiv-subsdiv+1)
+                if (p-1)>0
+                    ch(q,p)=[charge(q,p)+charge(q,p-1)]/4;
+                    c(k,1)=-((h^2)*ch(q,p)*1.6e-19/(8.85e-14*er))-vc(k);
+                else
+                    ch(q,p)=[charge(q,p)+charge(q,p+xdiv-1)]/4;
+                    c(k,1)=-((h^2)*ch(q,p)*1.6e-19/(8.85e-14*er))-vc(k);
+                end
+            end
+            
+        end
+    end
+    
+    sp=sparse(A);
+    u=(inv(sp))*c;
+    
+    % setting boundary condition
+    
+    for p=1:xdiv
+        for q=1
+            k=(q-1)*xdiv+(p);
+            top(k)=u(k);
+        end
+                
+        for q=ydiv
+            k=(q-1)*xdiv+(p);
+            bottom(k)=(top(k)-(((sheet(1))*1.6e-19*ydiv*h)/(2*8.85e-14*11.7*xthick*factor)))*0;
+        end
+        
+        for q=(ydiv-subsdiv-1)
+            k=(q-1)*xdiv+(p);
+            va(k)=u(k); % potential at Si/SiN boundary
+        end
+        
+        for q=(ydiv-subsdiv)
+            k=(q-1)*xdiv+(p);
+            vb(k)=u(k); % potential at Si/SiN boundary
+        end
+        
+        for q=(ydiv-subsdiv+1)
+            k=(q-1)*xdiv+(p);
+            vc(k)=(vb(k-10))*(1+(7.5/11.7))-((7.5/11.7)*va(k-20));
+        end
+    end
+         
+end
+
+percentage_ejection
+total_photoinjection= count_pi_die+count_pi_Si 
+count_pi_die
+count_pi_Si 
+
+for j=1:ydiv
+    for i=1:xdiv
+        k=(j-1)*xdiv+(i);
+        p(j,i)=u(k)/(1.6e-19*factor);% compensation for real photon dose.  
+    end
+end
+
+pot=zeros(1,20+diediv+50);
+for i=1
+    for k=21:20+diediv
+        j=-k+(20+diediv)+1;
+        pot(k)=p(j,i);
+        x(k)=(k-20)*1e-9;
+        x1(k)=x(k)*1e+9;
+    end
+end    
+
+ipot=pot(21);
+
+k=20;
+for r=0:-25e-6:-475e-6
+    pot(k)=ipot-(ipot*(-r)/500e-6);
+    x(k)=r;
+    x1(k)=r*1e+6/2;
+    k=k-1;
+end
+
+spot=pot(20+diediv);
+
+for k=20+diediv+1:20+diediv+50
+    pot(k)=spot-(((sheet(1))*1.6e-19*(k-(20+diediv))*1e-7)/(2*8.85e-14*xthick*factor));
+    x(k)=(k-20)*1e-9;
+    x1(k)=x(k)*1e+9;
+end
+
+figure(5)
+plot(x1,pot)
+
+xlswrite('potential_test.xls',pot)
+xlswrite('xaxis_test.xls',x1)
+xlswrite('dielectric_test.xls',d2)
+xlswrite('pe_test.xls',percentage_ejection)
+xlswrite('sheetcharge_test.xls',sheet)
+xlswrite('vacuum_test.xls',v)
